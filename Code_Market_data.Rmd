@@ -1,0 +1,142 @@
+---
+title: "Retail Analysis"
+output:
+  pdf_document: default
+  html_notebook: default
+---
+```{r, include=FALSE}
+library(tm)
+library(SnowballC)
+library(wordcloud)
+library(RColorBrewer)
+```
+#Basic Exploration
+```{r}
+#getwd()
+#Input raw/full data file
+data_raw <- read.csv("data.csv")
+
+#Explore the data set
+dim(data_raw)
+summary(data_raw)
+str(data_raw)
+
+#Check for null values
+colSums(is.na(data_raw))
+
+```
+
+
+#Identify Customer groups
+```{r}
+#Import Cutomer level rolled up data
+pre_data <- read.csv("Pre_prossed_data.csv")
+summary(pre_data)
+str(pre_data)
+
+#Remove customer id
+pre_dataclean <- pre_data[,-1]
+str(pre_dataclean)
+
+#Convert amount to numberic fields
+pre_dataclean[,c(2:6)] <- sapply(pre_dataclean[,c(2:6)],as.numeric)
+str(pre_dataclean)
+
+#Standadize all varaibles
+pre_dataclean_stand <- scale(pre_dataclean)
+summary(pre_dataclean_stand)
+```
+
+##Using K-means analysis to identify customer clusters
+```{r}
+#Getting ideal value of K
+
+kplot <- function(data,k,seed){
+  ss=numeric()
+  for (i in 1:k){
+    set.seed(seed)
+    ss[i] <- sum(kmeans(data,centers = i)$withinss)}
+  plot(1:k,ss, type ='b', xlab ="Number of Clusters", ylab = "Group sum of squares")}
+
+kplot(pre_dataclean_stand,k=10,seed=2)
+```
+```{r}
+set.seed(1)
+k.means_data <- kmeans(pre_dataclean_stand, centers = 6, nstart = 20)
+
+centre <- k.means_data$centers
+k.means_data$size
+#k.means_data$cluster
+summary(k.means_data)
+```
+
+```{r}
+#Add cluster to customer data
+pre_data.cluster <- cbind(pre_data,k.means_data$cluster) 
+#Aligning column names
+colnames(pre_data.cluster)[colnames(pre_data.cluster) == "ï..Customer.ID"] <- "CustomerID"
+colnames(pre_data.cluster)[colnames(pre_data.cluster) == "k.means_data$cluster"] <- "ClusterID"
+summary(pre_data.cluster)
+
+#Export file with cluster information
+write.csv(pre_data.cluster, file ="data_cluster.csv")
+
+```
+##Explore relation between cluster variables
+```{r}
+
+pre_data.cluster_cpy <- pre_data.cluster
+pre_data.cluster_cpy[,c(2:7)] <- sapply(pre_data.cluster_cpy[,c(2:7)],as.numeric)
+plot(pre_data.cluster_cpy$ClusterID ,pre_data.cluster_cpy$Frequency,main = "Cluster vs Frequency",
+     xlab = "Cluster", ylab = "Frequency", col = "brown", pch =16)
+
+plot(pre_data.cluster_cpy$ClusterID ,pre_data.cluster_cpy$TAmount,main = "Cluster vs Total Amount",
+     xlab = "Cluster", ylab = "Total Amount", col = "brown", pch =16)
+
+#pairs(pre_data.cluster_cpy[pre_data.cluster_cpy$ClusterID == c(4,5), 2:7], main = "Regression", col = #"green")
+
+cor(pre_data.cluster_cpy$Frequency,pre_data.cluster_cpy[2:7])
+
+```
+
+
+
+#Product description text mining
+```{r}
+
+#Adding cluster id to raw file
+data_raw_cluster <- merge(data_raw,pre_data.cluster[,c("CustomerID","ClusterID")], by="CustomerID" )
+summary(data_raw_cluster)
+
+#Get Wordcloud and word frequency matrix for each cluster
+i = c(4,5)
+data_raw_cluster_temp <- data_raw_cluster[data_raw_cluster$ClusterID == i,]
+#data_raw_cluster_temp <- data_raw_cluster # For all clusters
+
+#Create text corpus of Product name
+prod_corpus <- Corpus(VectorSource(data_raw_cluster_temp$Description))
+print(prod_corpus)
+inspect(prod_corpus[1:5])
+
+#Create document term matrix for the product discription
+prod_dtm <- DocumentTermMatrix(prod_corpus)
+prod_dtm_clean <- removeSparseTerms(prod_dtm,0.99)
+prod_dtm_df <- as.data.frame(as.matrix(prod_dtm_clean))
+
+#Wordcloud
+set.seed(i)
+#png("wordcloud.png", width=1280,height=800)
+wordcloud(colnames(prod_dtm_df),colSums(prod_dtm_df),colors = brewer.pal(6, 'Dark2'),min.freq = 500)
+
+#List of most frequent words
+prod_dtm_mat <- as.matrix(prod_dtm_clean)
+freq_words <- sort(colSums(prod_dtm_mat),decreasing = TRUE)
+freq_words_df <- data.frame(word = names(freq_words),freq = freq_words)
+head(freq_words_df, 10)
+write.csv(freq_words_df, file ="FrequentWordsCluster.csv")
+barplot(freq_words_df[1:10,]$freq, las = 2, names.arg = freq_words_df[1:10,]$word,
+        col ="lightblue", main ="Most frequent words",
+        ylab = "Word frequencies")
+
+```
+

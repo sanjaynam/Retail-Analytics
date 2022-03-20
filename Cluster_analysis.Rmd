@@ -74,7 +74,7 @@ summary(k.means_data)
 #Add cluster to customer data
 pre_data.cluster <- cbind(pre_data,k.means_data$cluster) 
 #Aligning column names
-colnames(pre_data.cluster)[colnames(pre_data.cluster) == "ï..Customer.ID"] <- "CustomerID"
+colnames(pre_data.cluster)[colnames(pre_data.cluster) == "Ã¯..Customer.ID"] <- "CustomerID"
 colnames(pre_data.cluster)[colnames(pre_data.cluster) == "k.means_data$cluster"] <- "ClusterID"
 summary(pre_data.cluster)
 
